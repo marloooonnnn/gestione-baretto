@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#111827" />
+    <title>Stato ordini - Gestione Baretto</title>
+    <link rel="stylesheet" href="/ordini.css" />
+  </head>
+  <body>
+    <main class="board">
+      <header class="board-header">
+        <div>
+          <p class="eyebrow">Gestione Baretto</p>
+          <h1>Stato degli ordini</h1>
+          <p class="subtitle">Avanzamento degli ordini in tempo reale</p>
+        </div>
+        <div class="refresh">
+          <span id="lastUpdated" aria-live="polite">Caricamento...</span>
+          <button id="refreshButton" type="button">Aggiorna</button>
+        </div>
+      </header>
+
+      <p id="errorMessage" class="error-message" role="alert" hidden></p>
+      <section id="orderBoard" class="order-board" aria-label="Avanzamento ordini"></section>
+    </main>
+
+    <script>
+      const columns = [
+        { status: 'in_attesa', title: 'In attesa', className: 'waiting' },
+        { status: 'in_preparazione', title: 'In preparazione', className: 'preparing' },
+        { status: 'completato', title: 'Completati', className: 'completed' },
+        { status: 'annullato', title: 'Annullati', className: 'cancelled' },
+      ];
+      const orderBoard = document.querySelector('#orderBoard');
+      const errorMessage = document.querySelector('#errorMessage');
+      const lastUpdated = document.querySelector('#lastUpdated');
+      const refreshButton = document.querySelector('#refreshButton');
+      let isLoading = false;
+
+      function renderOrders(orders) {
+        orderBoard.replaceChildren();
+
+        for (const column of columns) {
+          const items = orders.filter((order) => order.stato === column.status);
+          const section = document.createElement('section');
+          section.className = `status-column ${column.className}`;
+
+          const heading = document.createElement('h2');
+          heading.textContent = column.title;
+          const count = document.createElement('span');
+          count.className = 'order-count';
+          count.textContent = String(items.length);
+          count.setAttribute('aria-label', `${items.length} ordini`);
+          heading.append(count);
+          section.append(heading);
+
+          if (items.length === 0) {
+            const empty = document.createElement('p');
+            empty.className = 'empty-state';
+            empty.textContent = 'Nessun ordine';
+            section.append(empty);
+          } else {
+            const list = document.createElement('ul');
+            list.className = 'order-list';
+
+            for (const order of items) {
+              const item = document.createElement('li');
+              item.className = 'order-card';
+
+              const number = document.createElement('span');
+              number.className = 'order-number';
+              number.textContent = `Ordine #${order.id}`;
+
+              const product = document.createElement('strong');
+              product.className = 'product-name';
+              product.textContent = order.prodotto_nome;
+
+              const quantity = document.createElement('span');
+              quantity.className = 'quantity';
+              quantity.textContent = `Quantità: ${order.quantita}`;
+
+              item.append(number, product, quantity);
+              list.append(item);
+            }
+
+            section.append(list);
+          }
+
+          orderBoard.append(section);
+        }
+      }
+
+      async function loadOrders() {
+        if (isLoading) return;
+        isLoading = true;
+        refreshButton.disabled = true;
+
+        try {
+          const response = await fetch('/api/ordini');
+          const orders = await response.json();
+
+          if (!response.ok) {
+            throw new Error(orders.message || 'Impossibile caricare gli ordini.');
+          }
+          if (!Array.isArray(orders)) {
+            throw new Error('La risposta del server non contiene un elenco di ordini valido.');
+          }
+
+          renderOrders(orders);
+          errorMessage.hidden = true;
+          lastUpdated.textContent = `Aggiornato alle ${new Date().toLocaleTimeString('it-IT')}`;
+        } catch (error) {
+          console.error('Errore nel caricamento degli ordini:', error);
+          errorMessage.textContent = 'Impossibile aggiornare gli ordini. Riprova tra poco.';
+          errorMessage.hidden = false;
+          if (!lastUpdated.textContent || lastUpdated.textContent === 'Caricamento...') {
+            lastUpdated.textContent = 'Dati non disponibili';
+          }
+        } finally {
+          isLoading = false;
+          refreshButton.disabled = false;
+        }
+      }
+
+      refreshButton.addEventListener('click', loadOrders);
+      loadOrders();
+      window.setInterval(loadOrders, 15000);
+    </script>
+  </body>
+</html>
